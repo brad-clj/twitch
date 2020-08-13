@@ -1,4 +1,4 @@
-(ns play1.core)
+(ns hr.core)
 
 (set! *warn-on-reflection* true)
 
