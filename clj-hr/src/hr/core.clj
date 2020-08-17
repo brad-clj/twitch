@@ -68,16 +68,57 @@
         :edges #{[1 3] [1 2] [3 5]}
         :weight 6}}
 
+(defn normalized-ed-key
+  [n1 n2]
+  (-> (sort [n1 n2]) vec))
+
+(defn make-edge-data
+  [orig-graph me-nodes]
+  (loop [edge-data {}
+         graph orig-graph
+         me-nodes me-nodes]
+    (cond
+      (== (count graph) 1)
+      edge-data
+
+      :else
+      (let [[me-node & me-nodes] me-nodes
+            conn-node (-> me-node graph second first)
+            ed-key (normalized-ed-key me-node conn-node)
+            ed-val (let [ed-keys (-> me-node
+                                     orig-graph
+                                     second
+                                     (->> (remove #{conn-node})
+                                          (map (partial normalized-ed-key me-node))))]
+                     (reduce (fn [ed-val ed-key]
+                               (-> ed-val
+                                   (update :nodes #(into % (get-in edge-data [ed-key :nodes])))
+                                   (update :edges #(into % (get-in edge-data [ed-key :edges])))
+                                   (update :weight #(+ % (get-in edge-data [ed-key :weight])))))
+                             {:side (if (= me-node (first ed-key)) :left :right)
+                              :nodes #{me-node}
+                              :edges (into #{} ed-keys)
+                              :weight (-> me-node graph first)}
+                             ed-keys))
+            graph (-> graph
+                      (dissoc me-node)
+                      (update-in [conn-node 1] #(disj % me-node)))
+            me-nodes (cond-> me-nodes
+                       (== 1 (-> conn-node graph second count))
+                       (conj conn-node))]
+        (recur (assoc edge-data ed-key ed-val)
+               graph
+               me-nodes)))))
+
 (defn solve
   [graph]
   (let [total-wt (-> graph vals
                      (->> (map first)
                           (reduce +)))
         me-nodes (-> graph keys
-                     (->> (filter #(-> (graph %)
-                                       second
-                                       count
-                                       ((partial == 1))))))]
+                     (->> (filter #(-> (graph %) second count ((partial == 1))))))]
+    (make-edge-data graph me-nodes)
+    #_
     [graph total-wt me-nodes]))
 
 (defn process-edges
@@ -91,6 +132,15 @@
                   (update y update-fn y x)))
             {} edges)))
 
+(let [g (process-edges [[1 2] [1 3] [3 5] [1 4]]
+                       [1 2 2 1 1])]
+  (solve g))
+
+{[1 2] {:side :right, :nodes #{2}, :edges #{}, :weight 2}
+ [3 5] {:side :right, :nodes #{5}, :edges #{}, :weight 1}
+ [1 3] {:side :right, :nodes #{3 5}, :edges #{[3 5]}, :weight 3}
+ [1 4] {:side :left, :nodes #{1 3 2 5}, :edges #{[1 3] [1 2] [3 5]}, :weight 6}}
+
 (defn main
   []
   (let [q (read)]
@@ -103,6 +153,6 @@
                               [x y]))
                           (->> (repeatedly (dec n)))
                           (process-edges c))]
-                (prn (solve graph))))
-          (->> (repeatedly q))
-          dorun)))
+            (prn (solve graph))))
+        (->> (repeatedly q))
+        dorun)))
