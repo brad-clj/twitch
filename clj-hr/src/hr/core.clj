@@ -2,71 +2,7 @@
 
 (set! *warn-on-reflection* true)
 
-1 2 2 1 1
-
-7
-
-1 2 [5 2]
-1 3 [4 3]
-3 5 [6 1]
-1 4 [6 1]
-
-:total-wt 7
-:wt-and-edges-by-node
-{1 [1 #{4 3 2}], 2 [2 #{1}], 3 [2 #{1 5}], 4 [1 #{1}], 5 [1 #{3}]}
-:edge-node-by-node-mutating
-{}
-
-100
-
-47 47 (- 47 6)
-(let [twt 7
-      gedge 4
-      ledge (- twt gedge)]
-  (- ledge (- twt (* 2 ledge))))
-
-(def graph-data-by-edge
-  {[1 2] {:side :right
-          :nodes #{2}
-          :edges #{}
-          :weight 2}
-   [1 4] {:side :right
-          :nodes #{4}
-          :edges #{}
-          :weight 1}
-   [1 3] {:side :left
-          :nodes #{1 2 4}
-          :edges #{[1 2] [1 4]}
-          :weight 4}
-   [3 5] {:side :left
-          :nodes #{1 2 4 3}
-          :edges #{[1 3] [1 2] [1 4]}
-          :weight 6}})
-:mono-edge-nodes
-[]
-
-(let [twt 7
-      edge 6
-      gedge (max edge (- twt edge))
-      ledge (- twt gedge)]
-  (- ledge (- twt (* 2 ledge))))
-
-{[3 5] {:side :right
-        :nodes #{5}
-        :edges #{}
-        :weight 1}
- [1 3] {:side :right
-        :nodes #{3 5}
-        :edges #{[3 5]}
-        :weight 3}
- [1 2] {:side :right
-        :nodes #{2}
-        :edges #{}
-        :weight 2}
- [1 4] {:side :left
-        :nodes #{3 5 2 1}
-        :edges #{[1 3] [1 2] [3 5]}
-        :weight 6}}
+(require 'clojure.set)
 
 (defn normalized-ed-key
   [n1 n2]
@@ -77,11 +13,8 @@
   (loop [edge-data {}
          graph orig-graph
          me-nodes me-nodes]
-    (cond
-      (== (count graph) 1)
+    (if (<= (count graph) 1)
       edge-data
-
-      :else
       (let [[me-node & me-nodes] me-nodes
             conn-node (-> me-node graph second first)
             ed-key (normalized-ed-key me-node conn-node)
@@ -92,11 +25,9 @@
                                           (map (partial normalized-ed-key me-node))))]
                      (reduce (fn [ed-val ed-key]
                                (-> ed-val
-                                   (update :nodes #(into % (get-in edge-data [ed-key :nodes])))
                                    (update :edges #(into % (get-in edge-data [ed-key :edges])))
                                    (update :weight #(+ % (get-in edge-data [ed-key :weight])))))
                              {:side (if (= me-node (first ed-key)) :left :right)
-                              :nodes #{me-node}
                               :edges (into #{} ed-keys)
                               :weight (-> me-node graph first)}
                              ed-keys))
@@ -110,16 +41,76 @@
                graph
                me-nodes)))))
 
+(defn which-side
+  [left right]
+  (cond
+    ;; hr problem description is lacking, sorry about this hack...
+    (== left right)
+    [:down-the-middle #{0 left}]
+
+    (and (> left right)
+         (== (rem left 2) 0)
+         (>= (quot left 2) right))
+    [:left #{(quot left 2)}]
+
+    (and (> right left)
+         (== (rem right 2) 0)
+         (>= (quot right 2) left))
+    [:right #{(quot right 2)}]
+
+    (and (> left right)
+         (< (/ left 2) right))
+    [:left #{right (- left right)}]
+
+    (and (> right left)
+         (< (/ right 2) left))
+    [:right #{left (- right left)}]))
+
 (defn solve
   [graph]
   (let [total-wt (-> graph vals
                      (->> (map first)
                           (reduce +)))
         me-nodes (-> graph keys
-                     (->> (filter #(-> (graph %) second count ((partial == 1))))))]
-    (make-edge-data graph me-nodes)
-    #_
-    [graph total-wt me-nodes]))
+                     (->> (filter #(-> (graph %) second count ((partial == 1))))))
+        edge-data (make-edge-data graph me-nodes)
+        edges (set (keys edge-data))]
+    (-> (reduce (fn [ans ed-key]
+                  (let [side (-> (edge-data ed-key) :side)
+                        weight (-> (edge-data ed-key) :weight)
+                        [direction split-wts] (if (= side :left)
+                                                (which-side weight (- total-wt weight))
+                                                (which-side (- total-wt weight) weight))
+                        possible-ans (if split-wts
+                                       (let [wts (conj split-wts weight)]
+                                         (- (apply max wts)
+                                            (apply min wts))))]
+                    (cond
+                      (and (= direction :down-the-middle)
+                           (or (nil? ans)
+                               (< possible-ans ans)))
+                      possible-ans
+
+                      (or (nil? possible-ans)
+                          (and (some? ans) (< ans possible-ans))
+                          (-> (if (= side direction)
+                                (-> (edge-data ed-key) :edges)
+                                (clojure.set/difference edges
+                                                        (-> (edge-data ed-key) :edges)
+                                                        #{ed-key}))
+                              (->> (filter (fn [ed-key2]
+                                             (let [ed-val2 (edge-data ed-key2)
+                                                   split-v (if ((-> ed-val2 :edges) ed-key)
+                                                             (- total-wt (-> ed-val2 :weight))
+                                                             (-> ed-val2 :weight))]
+                                               (split-wts split-v)))))
+                              empty?))
+                      ans
+
+                      :else
+                      possible-ans)))
+                nil (keys edge-data))
+        (or -1))))
 
 (defn process-edges
   [edges c]
@@ -131,15 +122,6 @@
                   (update x update-fn x y)
                   (update y update-fn y x)))
             {} edges)))
-
-(let [g (process-edges [[1 2] [1 3] [3 5] [1 4]]
-                       [1 2 2 1 1])]
-  (solve g))
-
-{[1 2] {:side :right, :nodes #{2}, :edges #{}, :weight 2}
- [3 5] {:side :right, :nodes #{5}, :edges #{}, :weight 1}
- [1 3] {:side :right, :nodes #{3 5}, :edges #{[3 5]}, :weight 3}
- [1 4] {:side :left, :nodes #{1 3 2 5}, :edges #{[1 3] [1 2] [3 5]}, :weight 6}}
 
 (defn main
   []
@@ -153,6 +135,6 @@
                               [x y]))
                           (->> (repeatedly (dec n)))
                           (process-edges c))]
-            (prn (solve graph))))
+            (println (solve graph))))
         (->> (repeatedly q))
         dorun)))
