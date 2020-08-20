@@ -2,139 +2,119 @@
 
 (set! *warn-on-reflection* true)
 
-(require 'clojure.set)
-
-(defn normalized-ed-key
-  [n1 n2]
-  (-> (sort [n1 n2]) vec))
-
-(defn make-edge-data
-  [orig-graph me-nodes]
-  (loop [edge-data {}
-         graph orig-graph
-         me-nodes me-nodes]
-    (if (<= (count graph) 1)
-      edge-data
-      (let [[me-node & me-nodes] me-nodes
-            conn-node (-> me-node graph second first)
-            ed-key (normalized-ed-key me-node conn-node)
-            ed-val (let [ed-keys (-> me-node
-                                     orig-graph
-                                     second
-                                     (->> (remove #{conn-node})
-                                          (map (partial normalized-ed-key me-node))))]
-                     (reduce (fn [ed-val ed-key]
-                               (-> ed-val
-                                   (update :edges #(into % (get-in edge-data [ed-key :edges])))
-                                   (update :weight #(+ % (get-in edge-data [ed-key :weight])))))
-                             {:side (if (= me-node (first ed-key)) :left :right)
-                              :edges (into #{} ed-keys)
-                              :weight (-> me-node graph first)}
-                             ed-keys))
-            graph (-> graph
-                      (dissoc me-node)
-                      (update-in [conn-node 1] #(disj % me-node)))
-            me-nodes (cond-> me-nodes
-                       (== 1 (-> conn-node graph second count))
-                       (conj conn-node))]
-        (recur (assoc edge-data ed-key ed-val)
-               graph
-               me-nodes)))))
-
-(defn which-side
-  [left right]
-  (cond
-    ;; hr problem description is lacking, sorry about this hack...
-    (== left right)
-    [:down-the-middle #{0 left}]
-
-    (and (> left right)
-         (== (rem left 2) 0)
-         (>= (quot left 2) right))
-    [:left #{(quot left 2)}]
-
-    (and (> right left)
-         (== (rem right 2) 0)
-         (>= (quot right 2) left))
-    [:right #{(quot right 2)}]
-
-    (and (> left right)
-         (< (/ left 2) right))
-    [:left #{right (- left right)}]
-
-    (and (> right left)
-         (< (/ right 2) left))
-    [:right #{left (- right left)}]))
+(defn build-tree
+  [tree-values tree-edges]
+  (loop [tree (reduce (fn [tree [a b]]
+                        (let [av (update (tree (dec a)) :children #(conj % (dec b)))
+                              bv (update (tree (dec b)) :children #(conj % (dec a)))]
+                          (-> tree
+                              (assoc! (dec a) av)
+                              (assoc! (dec b) bv))))
+                      (-> (mapv (fn [value]
+                                  {:value value
+                                   :children #{}})
+                                tree-values)
+                          transient)
+                      tree-edges)
+         stack [0]
+         visited #{}]
+    (if (empty? stack)
+      (persistent! tree)
+      (let [selected-node (peek stack)]
+        (if-not (visited selected-node)
+          (recur (reduce (fn [tree child-node]
+                           (let [child-node-v (-> (tree child-node)
+                                                  (update :children #(disj % selected-node)))]
+                             (assoc! tree child-node child-node-v)))
+                         tree
+                         (get-in tree [selected-node :children]))
+                 (into stack (get-in tree [selected-node :children]))
+                 (conj visited selected-node))
+          (let [total-sum (reduce +
+                                  (get-in tree [selected-node :value])
+                                  (map #(get-in tree [% :value])
+                                       (get-in tree [selected-node :children])))
+                selected-node-v (-> (tree selected-node)
+                                    (assoc :value total-sum))]
+            (recur (assoc! tree selected-node selected-node-v)
+                   (pop stack)
+                   visited)))))))
 
 (defn solve
-  [graph]
-  (let [total-wt (-> graph vals
-                     (->> (map first)
-                          (reduce +)))
-        me-nodes (-> graph keys
-                     (->> (filter #(-> (graph %) second count ((partial == 1))))))
-        edge-data (make-edge-data graph me-nodes)
-        edges (set (keys edge-data))]
-    (-> (reduce (fn [ans ed-key]
-                  (let [side (-> (edge-data ed-key) :side)
-                        weight (-> (edge-data ed-key) :weight)
-                        [direction split-wts] (if (= side :left)
-                                                (which-side weight (- total-wt weight))
-                                                (which-side (- total-wt weight) weight))
-                        possible-ans (if split-wts
-                                       (let [wts (conj split-wts weight)]
-                                         (- (apply max wts)
-                                            (apply min wts))))]
-                    (cond
-                      (and (= direction :down-the-middle)
-                           (or (nil? ans)
-                               (< possible-ans ans)))
-                      possible-ans
+  [tree-values tree-edges]
+  (let [tree (build-tree tree-values tree-edges)
+        root-value (get-in tree [0 :value])]
+    (loop [min-result-value nil
+           stack [0]
+           visited #{}
+           visited-sums #{}
+           root-complement-sums #{}]
+      (if (empty? stack)
+        (or min-result-value -1)
+        (let [selected-node (peek stack)
+              selected-node-value (get-in tree [selected-node :value])]
+          (if-not (visited selected-node)
+            (let [result-value (if (and (or (visited-sums (* 2 selected-node-value))
+                                            (visited-sums (- root-value
+                                                             (* 2 selected-node-value))))
+                                        (>= (* 3 selected-node-value) root-value))
+                                 (- (* 3 selected-node-value)
+                                    root-value))
+                  min-result-value (if (and min-result-value result-value)
+                                     (min min-result-value result-value)
+                                     (or min-result-value result-value))
+                  stack (into stack (get-in tree [selected-node :children]))
+                  visited (conj visited selected-node)
+                  root-complement-sums (conj root-complement-sums (- root-value selected-node-value))]
+              (recur min-result-value
+                     stack
+                     visited
+                     visited-sums
+                     root-complement-sums))
+            (let [selected-sum-comp (- root-value selected-node-value)
+                  selected-sum-comp-half (quot selected-sum-comp 2)
 
-                      (or (nil? possible-ans)
-                          (and (some? ans) (< ans possible-ans))
-                          (-> (if (= side direction)
-                                (-> (edge-data ed-key) :edges)
-                                (clojure.set/difference edges
-                                                        (-> (edge-data ed-key) :edges)
-                                                        #{ed-key}))
-                              (->> (filter (fn [ed-key2]
-                                             (let [ed-val2 (edge-data ed-key2)
-                                                   split-v (if ((-> ed-val2 :edges) ed-key)
-                                                             (- total-wt (-> ed-val2 :weight))
-                                                             (-> ed-val2 :weight))]
-                                               (split-wts split-v)))))
-                              empty?))
-                      ans
+                  result-value
+                  (cond
+                    (== (* 2 selected-node-value) root-value)
+                    selected-node-value
 
-                      :else
-                      possible-ans)))
-                nil (keys edge-data))
-        (or -1))))
+                    (and (or (visited-sums selected-node-value)
+                             (root-complement-sums selected-node-value))
+                         (>= (* 3 selected-node-value) root-value))
+                    (- (* 3 selected-node-value)
+                       root-value)
 
-(defn process-edges
-  [edges c]
-  (let [update-fn (fn [data x y]
-                    (let [[wt nodes] (or data [(c (dec x)) #{}])]
-                      [wt (conj nodes y)]))]
-    (reduce (fn [graph [x y]]
-              (-> graph
-                  (update x update-fn x y)
-                  (update y update-fn y x)))
-            {} edges)))
+                    (and (== (rem selected-sum-comp 2) 0)
+                         (> selected-sum-comp-half selected-node-value)
+                         (or (visited-sums selected-sum-comp-half)
+                             (root-complement-sums selected-sum-comp-half)))
+                    (- selected-sum-comp-half selected-node-value))
+
+                  min-result-value (if (and min-result-value result-value)
+                                     (min min-result-value result-value)
+                                     (or min-result-value result-value))
+                  stack (pop stack)
+                  visited-sums (conj visited-sums selected-node-value)
+                  root-complement-sums (disj root-complement-sums selected-sum-comp)]
+              (recur min-result-value
+                     stack
+                     visited
+                     visited-sums
+                     root-complement-sums))))))))
 
 (defn main
   []
   (let [q (read)]
     (-> (fn []
           (let [n (read)
-                c (mapv (fn [_] (read)) (range n))
-                graph (-> (fn []
+                c (-> (repeatedly n read) doall)
+                edges (-> (fn []
                             (let [x (read)
                                   y (read)]
                               [x y]))
                           (->> (repeatedly (dec n)))
-                          (process-edges c))]
-            (println (solve graph))))
+                          doall)]
+            (println (solve c edges))))
         (->> (repeatedly q))
         dorun)))
