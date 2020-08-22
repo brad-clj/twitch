@@ -73,19 +73,19 @@ struct Solver {
       bool done;
       tie(x, prev, done) = stack.back();
       stack.pop_back();
-      auto &node = nodes[x];
+      auto& node = nodes[x];
       if (!done) {
         ++tim;
         node.tim_start = tim;
         node.sum = c[x];
         stack.push_back(make_tuple(x, prev, true));
-        for (auto y : graph[x]) {
+        for (const auto y : graph[x]) {
           if (y != prev) {
             stack.push_back(make_tuple(y, x, false));
           }
         }
       } else {
-        for (auto y : graph[x]) {
+        for (const auto y : graph[x]) {
           if (y != prev) {
             node.sum += nodes[y].sum;
           }
@@ -97,7 +97,7 @@ struct Solver {
 
   void generate_sums()
   {
-    for (auto &node : nodes) {
+    for (const auto& node : nodes) {
       if (sums_min_node.count(node.sum) == 0) {
         sums_min_node[node.sum] = node;
         sums_max_node[node.sum] = node;
@@ -112,9 +112,9 @@ struct Solver {
     }
   }
 
-  void do_it(Node &node)
+  void do_it(const Node& node)
   {
-    int64_t add = 3 * node.sum - sum;
+    const int64_t add = 3 * node.sum - sum;
     if ((sums_min_node[node.sum] != sums_max_node[node.sum]) ||
         (sums_min_node.count(node.sum - add) > 0 &&
          sums_min_node[node.sum - add] != node &&
@@ -128,10 +128,10 @@ struct Solver {
     }
   }
 
-  void uradi(Node &node)
+  void uradi(const Node& node)
   {
     if ((sum - node.sum) % 2 == 0) {
-      int64_t p = (sum - node.sum) / 2;
+      const int64_t p = (sum - node.sum) / 2;
       if ((sums_min_node.count(p) > 0 &&
            sums_min_node[p] != node &&
            ! is_related(sums_min_node[p], node)) ||
@@ -165,7 +165,7 @@ struct Solver {
         sums_min_node.count(sum / 2) > 0) {
       mini = sum / 2;
     }
-    for (auto &node : nodes) {
+    for (const auto& node : nodes) {
       if (3 * node.sum <= sum) {
         uradi(node);
       } else if (2 * node.sum < sum) {
