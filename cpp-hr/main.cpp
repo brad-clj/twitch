@@ -112,34 +112,49 @@ struct Solver {
     }
   }
 
+  // this gets called when the node is bigger than a third of the sum but less than half of the sum. so we are looking for
+  // another node of equal size and the remaindr is the add value.
   void do_it(const Node& node)
   {
     const int64_t add = 3 * node.sum - sum;
-    if ((sums_min_node[node.sum] != sums_max_node[node.sum]) ||
+    if (// this we have 2 nodes that are different with the same sum as the node that is being passed in
+        (sums_min_node[node.sum] != sums_max_node[node.sum]) ||
+        // checks if we have a node which isn't related so could be used to remove part of the remainder sum (sum - node.sum)
+        // to get a subtree that is equal to node.sum. subtree being ancestor nodes but with some descendants removed
         (sums_min_node.count(node.sum - add) > 0 &&
          sums_min_node[node.sum - add] != node &&
          ! is_related(node, sums_min_node[node.sum - add])) ||
+        // ditto..
         (sums_max_node.count(node.sum - add) > 0 &&
          sums_max_node[node.sum - add] != node &&
          ! is_related(node, sums_max_node[node.sum - add])) ||
+        // i guess if we have a node with a sum of either of these 2 values it just works???
         (sums_min_node.count(2 * node.sum - add) > 0) ||
         (sums_min_node.count(2 * node.sum) > 0)) {
       mini = min(mini, add);
     }
   }
 
+  // doesn't do anything if the remainder sum is odd, since we jump in to this only when the nodes is smaller than a third of
+  // the total sum. if we did anything when the remainder is odd we wouldn't be able to have a split on the remainder that
+  // would make two equal parts.
   void uradi(const Node& node)
   {
     if ((sum - node.sum) % 2 == 0) {
       const int64_t p = (sum - node.sum) / 2;
-      if ((sums_min_node.count(p) > 0 &&
+      if (// the node with the sum of p is not my ancestor, thus can be used as one of the bigger graph segements, and my
+          // ancestors minus that p node will be the other half.
+          (sums_min_node.count(p) > 0 &&
            sums_min_node[p] != node &&
            ! is_related(sums_min_node[p], node)) ||
+          // dito, but max node...
           (sums_max_node.count(p) > 0 &&
            sums_max_node[p] != node &&
            ! is_related(sums_max_node[p], node)) ||
+          // nodes exists that is ancestor that would match the size we need if we remove our node.sum from theirs
           (sums_min_node.count(p + node.sum) > 0 &&
            is_related(sums_min_node[p + node.sum], node)) ||
+          // dito, but max node...
           (sums_max_node.count(p + node.sum) > 0 &&
            is_related(sums_max_node[p + node.sum], node))) {
         mini = min(mini, p - node.sum);
@@ -182,9 +197,9 @@ struct Solver {
 
 int main()
 {
-  int32_t t;
-  cin >> t;
-  for (int32_t i = 0; i < t; ++i) {
+  int32_t q;
+  cin >> q;
+  for (int32_t i = 0; i < q; ++i) {
     int32_t n;
     cin >> n;
     Solver s(n);
