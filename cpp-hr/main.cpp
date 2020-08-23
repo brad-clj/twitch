@@ -113,7 +113,7 @@ struct Solver {
   }
 
   // this gets called when the node is bigger than a third of the sum but less than half of the sum. so we are looking for
-  // another node of equal size and the remaindr is the add value.
+  // another node of equal size and the remainder is the add value.
   void do_it(const Node& node)
   {
     const int64_t add = 3 * node.sum - sum;
@@ -142,19 +142,19 @@ struct Solver {
   {
     if ((sum - node.sum) % 2 == 0) {
       const int64_t p = (sum - node.sum) / 2;
-      if (// the node with the sum of p is not my ancestor, thus can be used as one of the bigger graph segements, and my
+      if (// the node with the sum of p is not my ancestor, thus can be used as one of the bigger graph segments, and my
           // ancestors minus that p node will be the other half.
           (sums_min_node.count(p) > 0 &&
            sums_min_node[p] != node &&
            ! is_related(sums_min_node[p], node)) ||
-          // dito, but max node...
+          // ditto, but max node...
           (sums_max_node.count(p) > 0 &&
            sums_max_node[p] != node &&
            ! is_related(sums_max_node[p], node)) ||
           // nodes exists that is ancestor that would match the size we need if we remove our node.sum from theirs
           (sums_min_node.count(p + node.sum) > 0 &&
            is_related(sums_min_node[p + node.sum], node)) ||
-          // dito, but max node...
+          // ditto, but max node...
           (sums_max_node.count(p + node.sum) > 0 &&
            is_related(sums_max_node[p + node.sum], node))) {
         mini = min(mini, p - node.sum);
