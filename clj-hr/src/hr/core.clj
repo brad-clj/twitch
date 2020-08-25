@@ -112,6 +112,7 @@
                                             #(dissoc % word))
                                     (update-in words [(blank :length) word]
                                                dec))})))))))
+
 (defn solve
   [crossword words]
   (let [initial-data {:blanks (process-crossword crossword)
