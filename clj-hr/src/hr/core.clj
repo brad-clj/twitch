@@ -8,7 +8,9 @@
   [words]
   (reduce (fn [m word]
             (update m (count word)
-                    #(conj (or % []) word)))
+                    (fn [fm]
+                      (update (or fm {}) word
+                              #(inc (or % 0))))))
           {} words))
 
 (defn process-crossword
@@ -78,64 +80,77 @@
                     (update-in [k2 :intersect] #(assoc % k1 point)))))
             blanks intersects)))
 
-(let [crossword
-      [[\+ \- \+ \+ \+ \+ \+ \+ \+ \+]
-       [\+ \- \+ \+ \+ \+ \+ \+ \+ \+]
-       [\+ \- \+ \+ \+ \+ \+ \+ \+ \+]
-       [\+ \- \- \- \- \- \+ \+ \+ \+]
-       [\+ \- \+ \+ \+ \- \+ \+ \+ \+]
-       [\+ \- \+ \+ \+ \- \+ \+ \+ \+]
-       [\+ \+ \+ \+ \+ \- \+ \+ \+ \+]
-       [\+ \+ \- \- \- \- \- \- \+ \+]
-       [\+ \+ \+ \+ \+ \- \+ \+ \+ \+]
-       [\+ \+ \+ \+ \+ \- \+ \+ \+ \+]]
-
-      words ["LONDON" "DELHI" "ICELAND" "ANKARA"]]
-  (process-crossword crossword)
-  (process-words words)
-  (solve crossword words))
-
+(defn process-stack
+  [stack]
+  (let [{:keys [blanks words]} (peek stack)
+        stack (pop stack)
+        blanks-k (some (fn [k]
+                         (if-not (-> (blanks k) :word)
+                           k))
+                       (keys blanks))
+        blank (blanks blanks-k)]
+    (into stack
+          (-> (blank :length) words keys
+              (->> (filter (fn [word]
+                             (every? (fn [[int-k [int-line int-column]]]
+                                       (let [intersect-blank (blanks int-k)]
+                                         (if-not (intersect-blank :word)
+                                           true
+                                           (let [blank-word-pos (if (= (blank :direction) :right)
+                                                                  (- int-column (blank :column-pos))
+                                                                  (- int-line (blank :line-pos)))
+                                                 intersect-word-pos (if (= (intersect-blank :direction) :right)
+                                                                      (- int-column (intersect-blank :column-pos))
+                                                                      (- int-line (intersect-blank :line-pos)))]
+                                             (= (get word blank-word-pos)
+                                                (get (intersect-blank :word) intersect-word-pos))))))
+                                     (blank :intersect))))
+                   (map (fn [word]
+                          {:blanks (assoc-in blanks [blanks-k :word] word)
+                           :words (if (<= (get-in words [(blank :length) word]) 1)
+                                    (update words (blank :length)
+                                            #(dissoc % word))
+                                    (update-in words [(blank :length) word]
+                                               dec))})))))))
 (defn solve
   [crossword words]
   (let [initial-data {:blanks (process-crossword crossword)
-                      #_{0 {:line-pos 0, :column-pos 1, :length 6, :direction :down, :intersect {1 [3 1]}}
-                         1 {:line-pos 3, :column-pos 1, :length 5, :direction :right, :intersect {0 [3 1], 2 [3 5]}}
-                         2 {:line-pos 3, :column-pos 5, :length 7, :direction :down, :intersect {3 [7 5], 1 [3 5]}}
-                         3 {:line-pos 7, :column-pos 2, :length 6, :direction :right, :intersect {2 [7 5]}}}
-                      :words (process-words words)
-                      ;; todo: process-words should emit a frequency map as the values???
-                      #_{6 ["LONDON" "ANKARA"]
-                         5 ["DELHI"]
-                         7 ["ICELAND"]}}
-        process (fn [stack]
-                  (let [{:keys [blanks words]} (peek stack)
-                        stack (pop stack)
-                        blanks-k (some #(if-not (-> (blanks %) :word) %)
-                                       (keys blanks))
-                        word-length (-> (blanks blanks-k) :length)
-                        ]
-                    (into stack
-                          (mapcat (fn [word]
-                                    ;; todo: build out stack entry if the word can fit at the blanks-k. so this will entail
-                                    ;; checking the :intersect(s) don't conflict with an existing word, if we are good we emit
-                                    ;; a map with :blanks and :words updated where :blanks now has a :word key and :words has
-                                    ;; the word disjoined, if we are not good, we just emit an empty seq, so mapcat will not
-                                    ;; include it in the collection
-                                    )
-                                  (words word-length)))))
+                      :words (process-words words)}
         solved? (fn [stack]
                   (let [{:keys [blanks]} (peek stack)]
-                    (every? #(:word %) blanks)))]
-    (loop [stack (process [initial-data])]
+                    (every? :word (vals blanks))))]
+    (loop [stack (process-stack [initial-data])]
       (cond
         (empty? stack)
         nil
 
         (solved? stack)
-        (peek stack)
+        (-> (peek stack) :blanks)
 
         :else
-        (recur (process stack))))))
+        (recur (process-stack stack))))))
+
+(defn format-crossword
+  [blanks]
+  (let [m (reduce (fn [m blank]
+                    (-> (map vector
+                             (blank :word)
+                             (iterate (fn [[line-pos column-pos]]
+                                        (if (= (blank :direction) :right)
+                                          [line-pos (inc column-pos)]
+                                          [(inc line-pos) column-pos]))
+                                      [(blank :line-pos) (blank :column-pos)]))
+                        (->> (reduce (fn [m [c [line-pos column-pos]]]
+                                       (assoc m [line-pos column-pos] c))
+                                     m))))
+                  {} (vals blanks))]
+    (-> (mapv (fn [line-pos]
+                (apply str (map (fn [column-pos]
+                                  (get m [line-pos column-pos] \+))
+                                (range 10))))
+              (range 10))
+        (->> (interpose \newline)
+             (apply str)))))
 
 (defn main
   []
@@ -147,17 +162,3 @@
     (-> (solve crossword words)
         format-crossword
         println)))
-
-{5 ["DELHI"]
- 6 ["LONDON"
-    "ANKARA"]
- 7 ["ICELAND"]}
-
-([[3 1] #{0 1}]
- [[7 5] #{3 2}]
- [[3 5] #{1 2}])
-
-{0 {:line-pos 0, :column-pos 1, :length 6, :direction :down, :intersect {1 [3 1]}}
- 1 {:line-pos 3, :column-pos 1, :length 5, :direction :right, :intersect {0 [3 1], 2 [3 5]}}
- 2 {:line-pos 3, :column-pos 5, :length 7, :direction :down, :intersect {1 [3 5], 3 [7 5]}}
- 3 {:line-pos 7, :column-pos 2, :length 6, :direction :right, :intersect {2 [7 5]}}}
