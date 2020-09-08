@@ -2,6 +2,8 @@
 
 (set! *warn-on-reflection* true)
 
+;; https://www.hackerrank.com/challenges/maximum-xor
+
 (defn make-search
   [& {:keys [id cmp] :or {id identity, cmp <}}]
   (let [c (comparator cmp)]
