@@ -2,32 +2,6 @@
 
 (set! *warn-on-reflection* true)
 
-;; what xor is?
-#_
-(let [a 2r0011
-      b 2r1001
-      ret (bit-xor a b)]
-  (map (fn [x] (Long/toBinaryString x)) [a b ret]))
-
-;; the dump too slow solution
-#_
-(let [ms [92837498 234 123 56 3456 678]
-      ns [234 123 345345 234234 123123 6456]]
-  (-> ms
-      (->> (map (fn [m]
-                  (-> (map (fn [n] (bit-xor m n))
-                           ns)
-                      (->> (reduce max))))))))
-
-;; thoughts on solution
-#_
-(do
-  [2 1 0]
-
-  2r010010100100101
-  2r000000000110100
-  )
-
 (defn make-search
   [& {:keys [id cmp] :or {id identity, cmp <}}]
   (let [c (comparator cmp)]
@@ -58,27 +32,59 @@
 (def search
   (make-search :cmp >))
 
+(defn get-high-bit
+  [num]
+  (loop [bit 0, num num]
+    (let [num (bit-clear num bit)]
+      (if (zero? num)
+        bit
+        (recur (inc bit) num)))))
+
+(defn fill-bits
+  ^long [bit]
+  (reduce (fn [num bit]
+            (bit-set num bit))
+          0 (range (inc bit))))
+
 (defn solve
-  [])
+  [nums query]
+  (loop [bit (-> (map get-high-bit
+                      [(first nums) query])
+                 (->> (reduce max)))
+         upper (fill-bits bit)
+         lower 0]
+    (let [bit-set? (bit-test query bit)
+          #_[upper lower] #_(let [bit-op (if bit-set? bit-clear bit-set)]
+                              (map #(bit-op % bit)
+                                   [upper lower]))
+          upper (long ((if bit-set? bit-clear bit-set) upper bit))
+          lower (long ((if bit-set? bit-clear bit-set) lower bit))
+          upper-i (-> (search nums upper) first)
+          lower-i (-> (search nums lower) second)]
+      (cond
+        (== upper-i lower-i)
+        (let [#_[upper lower] #_(let [bit-op (if bit-set? bit-set bit-clear)]
+                                  (map #(bit-op % bit)
+                                       [upper lower]))
+              upper (long ((if bit-set? bit-set bit-clear) upper bit))
+              lower (long ((if bit-set? bit-set bit-clear) lower bit))]
+          (recur (dec bit) upper lower))
+
+        (<= (- lower-i upper-i) 100)
+        (-> (map #(bit-xor query %)
+                 (subvec nums upper-i lower-i))
+            (->> (reduce max)))
+
+        :else
+        (recur (dec bit) upper lower)))))
 
 (defn main
-  [])
-
-;; I'm struggling here
-#_
-(let [next-high-bit-in-q calc_it
-      bit highest-bit-among-arr
-      arr-subv _?
-      ]
-  (cond
-    (< (count arr-subv) 1000)
-    (do #_"brute force it")
-
-    (> highest-bit-among-arr high-bit-in-q)
-    (do #_"get some range over arr that matches that high bit")
-
-    (== highest-bit-among-arr high-bit-in-q)
-    (do #_"get some range over arr that is past that high bit")
-
-    (< highest-bit-among-arr high-bit-in-q)
-    (do #_"check next higest bit in q?")))
+  []
+  (let [n (read)
+        arr (-> (repeatedly n read)
+                (->> (sort >))
+                vec)
+        m (read)
+        queries (repeatedly m read)]
+    (run! (comp println (partial solve arr))
+          queries)))
