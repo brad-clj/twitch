@@ -54,23 +54,17 @@
          upper (fill-bits bit)
          lower 0]
     (let [bit-set? (bit-test query bit)
-          #_[upper lower] #_(let [bit-op (if bit-set? bit-clear bit-set)]
-                              (map #(bit-op % bit)
-                                   [upper lower]))
           upper (long ((if bit-set? bit-clear bit-set) upper bit))
           lower (long ((if bit-set? bit-clear bit-set) lower bit))
           upper-i (-> (search nums upper) first)
           lower-i (-> (search nums lower) second)]
       (cond
         (== upper-i lower-i)
-        (let [#_[upper lower] #_(let [bit-op (if bit-set? bit-set bit-clear)]
-                                  (map #(bit-op % bit)
-                                       [upper lower]))
-              upper (long ((if bit-set? bit-set bit-clear) upper bit))
+        (let [upper (long ((if bit-set? bit-set bit-clear) upper bit))
               lower (long ((if bit-set? bit-set bit-clear) lower bit))]
           (recur (dec bit) upper lower))
 
-        (<= (- lower-i upper-i) 100)
+        (<= (- lower-i upper-i) 10)
         (-> (map #(bit-xor query %)
                  (subvec nums upper-i lower-i))
             (->> (reduce max)))
@@ -85,6 +79,6 @@
                 (->> (sort >))
                 vec)
         m (read)
-        queries (repeatedly m read)]
-    (run! (comp println (partial solve arr))
-          queries)))
+        queries (-> (repeatedly m read) doall)
+        lines (-> (map (partial solve arr) queries) doall)]
+    (run! println lines)))
