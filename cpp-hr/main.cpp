@@ -59,6 +59,8 @@ int32_t solve(const vector<int32_t> &arr, int32_t q)
   auto bit = max(get_high_bit(q), get_high_bit(arr[0]));
   auto upper = fill_bits(bit);
   int32_t lower = 0;
+  auto upper_i = arr.begin();
+  auto lower_i = arr.end();
   while (true) {
     const auto is_bit_set = bit_test(q, bit);
     if (is_bit_set) {
@@ -68,9 +70,9 @@ int32_t solve(const vector<int32_t> &arr, int32_t q)
       upper = bit_set(upper, bit);
       lower = bit_set(lower, bit);
     }
-    const auto upper_i = lower_bound(arr.begin(), arr.end(), upper, greater<int32_t>());
-    const auto lower_i = upper_bound(arr.begin(), arr.end(), lower, greater<int32_t>());
-    if (upper_i == lower_i) {
+    const auto upper_i2 = lower_bound(upper_i, lower_i, upper, greater<int32_t>());
+    const auto lower_i2 = upper_bound(upper_i, lower_i, lower, greater<int32_t>());
+    if (upper_i2 == lower_i2) {
       if (is_bit_set) {
         upper = bit_set(upper, bit);
         lower = bit_set(lower, bit);
@@ -78,12 +80,15 @@ int32_t solve(const vector<int32_t> &arr, int32_t q)
         upper = bit_clear(upper, bit);
         lower = bit_clear(lower, bit);
       }
-    } else if (lower_i - upper_i <= 150) {
+    } else if (lower_i2 - upper_i2 <= 5) {
       int32_t ret = 0;
-      for (auto i = upper_i; i != lower_i; ++i) {
+      for (auto i = upper_i2; i != lower_i2; ++i) {
         ret = max(ret, *i ^ q);
       }
       return ret;
+    } else {
+      upper_i = upper_i2;
+      lower_i = lower_i2;
     }
     --bit;
   }

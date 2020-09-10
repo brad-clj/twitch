@@ -54,25 +54,41 @@
                       [(first nums) query])
                  (->> (reduce max)))
          upper (fill-bits bit)
-         lower 0]
+         lower 0
+         upper-i 0
+         lower-i (count nums)]
     (let [bit-set? (bit-test query bit)
           upper (long ((if bit-set? bit-clear bit-set) upper bit))
           lower (long ((if bit-set? bit-clear bit-set) lower bit))
-          upper-i (-> (search nums upper) first)
-          lower-i (-> (search nums lower) second)]
+          upper-i2 (-> (search nums upper
+                               upper-i lower-i)
+                       first
+                       long)
+          lower-i2 (-> (search nums lower
+                               upper-i lower-i)
+                       second
+                       long)]
       (cond
-        (== upper-i lower-i)
+        (== upper-i2 lower-i2)
         (let [upper (long ((if bit-set? bit-set bit-clear) upper bit))
               lower (long ((if bit-set? bit-set bit-clear) lower bit))]
-          (recur (dec bit) upper lower))
+          (recur (dec bit)
+                 upper
+                 lower
+                 upper-i
+                 lower-i))
 
-        (<= (- lower-i upper-i) 10)
+        (<= (- lower-i2 upper-i2) 10)
         (-> (map #(bit-xor query %)
-                 (subvec nums upper-i lower-i))
+                 (subvec nums upper-i2 lower-i2))
             (->> (reduce max)))
 
         :else
-        (recur (dec bit) upper lower)))))
+        (recur (dec bit)
+               upper
+               lower
+               upper-i2
+               lower-i2)))))
 
 (defn main
   []
